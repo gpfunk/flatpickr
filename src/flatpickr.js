@@ -453,8 +453,11 @@ function Flatpickr(element, config) {
 	}
 
 	function isEnabled(dateToCheck) {
+		// if a min date is present, clone it and zero out the time to ensure the day is still enabled
+		const minDate = self.config.minDate ? new Date(self.config.minDate) : null;
+		if (minDate) minDate.setHours(0, 0, 0, 0);
 		if (
-			(self.config.minDate && dateToCheck < self.config.minDate) ||
+			(minDate && dateToCheck < minDate) ||
 			(self.config.maxDate && dateToCheck > self.config.maxDate)
 		) {
 			return false;
@@ -615,6 +618,11 @@ function Flatpickr(element, config) {
 				timeless = true;
 			}
 
+			else if (date === "now") {
+				date = new Date();
+				timeless = false;
+			}
+
 			else if (self.config.parseDate) {
 				date = self.config.parseDate(date);
 			}
@@ -748,6 +756,7 @@ function Flatpickr(element, config) {
 		if (self.config.minDate) {
 			self.config.minDate = parseDate(self.config.minDate, true);
 		}
+
 		if (self.config.maxDate) {
 			self.config.maxDate = parseDate(self.config.maxDate, true);
 		}
@@ -933,34 +942,63 @@ function Flatpickr(element, config) {
 			e.target.blur();
 		}
 
-		if (self.config.enableTime && !self.isMobile) {
-			// update time
-			let hours = (parseInt(self.hourElement.value, 10) || 0),
-				seconds;
-
-			const minutes = (60 + (parseInt(self.minuteElement.value, 10) || 0)) % 60;
-
-			if (self.config.enableSeconds) {
-				seconds = (60 + (parseInt(self.secondElement.value, 10)) || 0) % 60;
-			}
-
+		// gets the appropriate hours
+		function getHours(hours) {
 			if (!self.config.time_24hr) {
 				// the real number of hours for the date object
 				hours = hours % 12 + 12 * (self.amPM.innerHTML === "PM");
 			}
+			return hours;
+		}
 
-			self.selectedDateObj.setHours(
-				hours,
+		if (self.config.enableTime && !self.isMobile) {
+			// update time
+			let hours,
 				minutes,
-				seconds === undefined ? self.selectedDateObj.getSeconds() : seconds
-			);
+				seconds;
+
+			hours = getHours(parseInt(self.hourElement.value, 10) || 0);
+
+			minutes = (60 + (parseInt(self.minuteElement.value, 10) || 0)) % 60;
+
+			if (self.config.enableSeconds) {
+				seconds = (60 + (parseInt(self.secondElement.value, 10)) || 0) % 60;
+			}
+			else {
+				seconds = self.selectedDateObj.getSeconds();
+			}
+
+			// create a new date to test against and ensure valid date
+			const updatedDate = new Date(self.selectedDateObj);
+			updatedDate.setHours(hours, minutes, seconds);
+
+			if (updatedDate < self.config.minDate) {
+				// date isn't valid, attempt to set date to previous value
+				hours = getHours(self.selectedDateObj.getHours());
+
+				minutes = self.selectedDateObj.getMinutes();
+
+				updatedDate.setHours(hours, minutes, seconds);
+				// this would only be false if coming from a future date back to the present date,
+				// where the time makes it an invalid date
+				if (updatedDate < self.config.minDate) {
+					hours = getHours(self.config.minDate.getHours());
+
+					minutes = self.config.minDate.getMinutes();
+					if (self.config.enableSeconds) {
+						seconds = self.config.minDate.getSeconds();
+					}
+				}
+			}
+
+			self.selectedDateObj.setHours(hours, minutes, seconds);
 
 			self.hourElement.value = pad(
 				!self.config.time_24hr ? (12 + hours) % 12 + 12 * (hours % 12 === 0) : hours
 			);
 			self.minuteElement.value = pad(minutes);
 
-			if (seconds !== undefined) {
+			if (self.secondElement !== undefined) {
 				self.secondElement.value = pad(seconds);
 			}
 		}
